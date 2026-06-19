@@ -6,7 +6,7 @@ use axum::{
 use chrono::DateTime;
 use serde::Deserialize;
 use sqlx::SqlitePool;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::models::{ApiResponse, HourlyTemperature, TemperatureRecord, TemperatureReport};
 use crate::storage::{batch_report_temperatures, get_hourly_data, report_temperature};
@@ -22,16 +22,34 @@ pub async fn report_temperature_handler(
     State(pool): State<SqlitePool>,
     Json(payload): Json<TemperatureReport>,
 ) -> (StatusCode, Json<ApiResponse<TemperatureRecord>>) {
-    info!(
-        "收到温度上报 - 设备: {}, 温度: {}°C",
-        payload.device_id, payload.temperature
-    );
+    if let Some(ct) = payload.client_timestamp {
+        info!(
+            "收到温度上报 - 设备: {}, 温度: {}°C, 客户端时间: {} (服务器时间为准)",
+            payload.device_id, payload.temperature, ct
+        );
+    } else {
+        info!(
+            "收到温度上报 - 设备: {}, 温度: {}°C (服务器时间为准)",
+            payload.device_id, payload.temperature
+        );
+    }
 
     match report_temperature(&pool, &payload).await {
-        Ok(record) => (
-            StatusCode::OK,
-            Json(ApiResponse::success(record)),
-        ),
+        Ok(record) => {
+            if let Some(ct) = record.client_timestamp {
+                let diff = (record.timestamp - ct).num_seconds();
+                if diff.abs() > 300 {
+                    warn!(
+                        "设备 {} 客户端时间与服务器时间偏差较大: {} 秒",
+                        record.device_id, diff
+                    );
+                }
+            }
+            (
+                StatusCode::OK,
+                Json(ApiResponse::success(record)),
+            )
+        }
         Err(e) => {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,

@@ -7,7 +7,7 @@ pub struct TemperatureReport {
     pub device_id: String,
     pub temperature: f64,
     pub humidity: Option<f64>,
-    pub timestamp: Option<DateTime<Utc>>,
+    pub client_timestamp: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -17,6 +17,7 @@ pub struct TemperatureRecord {
     pub temperature: f64,
     pub humidity: Option<f64>,
     pub timestamp: DateTime<Utc>,
+    pub client_timestamp: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
 

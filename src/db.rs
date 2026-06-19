@@ -19,6 +19,7 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool> {
             temperature REAL NOT NULL,
             humidity REAL,
             timestamp DATETIME NOT NULL,
+            client_timestamp DATETIME,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
         "#,
@@ -70,13 +71,14 @@ pub async fn insert_temperature_record(
     report: &TemperatureReport,
 ) -> Result<TemperatureRecord> {
     let id = Uuid::new_v4().to_string();
-    let timestamp = report.timestamp.unwrap_or_else(Utc::now);
-    let now = Utc::now();
+    let timestamp = Utc::now();
+    let now = timestamp;
+    let client_timestamp = report.client_timestamp;
 
     sqlx::query(
         r#"
-        INSERT INTO temperature_records (id, device_id, temperature, humidity, timestamp, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO temperature_records (id, device_id, temperature, humidity, timestamp, client_timestamp, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(&id)
@@ -84,6 +86,7 @@ pub async fn insert_temperature_record(
     .bind(report.temperature)
     .bind(report.humidity)
     .bind(timestamp)
+    .bind(client_timestamp)
     .bind(now)
     .execute(pool)
     .await?;
@@ -94,6 +97,7 @@ pub async fn insert_temperature_record(
         temperature: report.temperature,
         humidity: report.humidity,
         timestamp,
+        client_timestamp,
         created_at: now,
     })
 }
@@ -107,7 +111,7 @@ pub async fn get_records_in_hour(
 
     let records = sqlx::query_as::<_, TemperatureRecord>(
         r#"
-        SELECT id, device_id, temperature, humidity, timestamp, created_at
+        SELECT id, device_id, temperature, humidity, timestamp, client_timestamp, created_at
         FROM temperature_records
         WHERE device_id = ? AND timestamp >= ? AND timestamp < ?
         ORDER BY timestamp ASC
